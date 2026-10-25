@@ -1,0 +1,385 @@
+\documentclass[11pt,a4paper]{article}
+
+% ------------------------------------------------------------------ Paquets
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.17}
+\usetikzlibrary{babel}          % evite les conflits entre TikZ et babel francais
+\usepackage[hidelinks]{hyperref}
+
+% ------------------------------------------------------------------ Style du code
+\definecolor{fondcode}{RGB}{247,247,247}
+\definecolor{motcle}{RGB}{0,70,160}
+\definecolor{commentaire}{RGB}{0,120,60}
+\lstset{
+  language=C++,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{motcle}\bfseries,
+  commentstyle=\color{commentaire}\itshape,
+  backgroundcolor=\color{fondcode},
+  frame=single, rulecolor=\color{black!20},
+  numbers=left, numberstyle=\tiny\color{black!50},
+  breaklines=true, columns=fullflexible,
+  showstringspaces=false, tabsize=4
+}
+
+% ------------------------------------------------------------------ Page de titre
+\title{\textbf{Benchmark du parcours en largeur d'un arbre n-aire}\\[4pt]
+       \large Influence du conteneur sous-jacent de la file :\\
+       \texttt{std::deque}, \texttt{std::list} et file personnalisée sur \texttt{std::vector}}
+\author{Prénom NOM \\ ILISI 2 \\ \small Encadrant : \textit{à compléter}}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Ce rapport mesure le temps d'exécution d'un parcours en largeur (BFS) sur un arbre n-aire
+selon la file utilisée : \texttt{std::queue} reposant sur \texttt{std::deque} (choix par défaut),
+\texttt{std::queue} reposant sur \texttt{std::list}, et une file écrite à la main sur un
+\texttt{std::vector}. Les mesures sont faites sans aucun affichage, sur un arbre de 12~nœuds
+et sur un arbre de 1\,000\,000 de nœuds, avec quatre essais indépendants. La file sur
+\texttt{std::list} est la plus lente (environ $5\times$ sur le petit arbre et $8\times$ sur le
+grand). \texttt{std::deque} et la file personnalisée obtiennent des temps proches sur le grand arbre.
+\end{abstract}
+
+\noindent\textbf{Code source :} \url{https://github.com/rafaabenn/parcours-largeur-arbre}
+
+\tableofcontents
+\newpage
+
+% =====================================================================
+\section{Objectif}
+% =====================================================================
+
+Le parcours en largeur repose sur une file FIFO. En C++, \texttt{std::queue} n'est pas un
+conteneur à part entière mais un \emph{adaptateur} : elle enveloppe un autre conteneur
+(par défaut \texttt{std::deque}) et n'en expose que \texttt{push}, \texttt{pop}, \texttt{front}
+et \texttt{empty}. L'algorithme ne change pas avec le conteneur, mais les performances peuvent
+changer. L'objectif de ce benchmark est de répondre à trois questions :
+
+\begin{enumerate}
+  \item Quel conteneur sous-jacent rend le parcours le plus rapide ?
+  \item L'écart entre les conteneurs dépend-il de la taille de l'arbre ?
+  \item Une file simple écrite sur un \texttt{std::vector} est-elle compétitive face à la STL ?
+\end{enumerate}
+
+% =====================================================================
+\section{Structures comparées}
+% =====================================================================
+
+\subsection{L'arbre n-aire}
+
+Chaque nœud stocke ses enfants dans un \texttt{std::vector<Noeud*>}, ce qui permet un nombre
+quelconque d'enfants. L'arbre est défini une seule fois dans \texttt{Arbre.h} et il est partagé
+par tous les programmes.
+
+\begin{lstlisting}
+struct Noeud {
+    int valeur;
+    std::vector<Noeud*> enfants;   // nombre quelconque d'enfants
+    bool visite;
+    Noeud(int v) : valeur(v), visite(false) {}
+};
+\end{lstlisting}
+
+Deux arbres sont utilisés :
+\begin{itemize}
+  \item \textbf{Petit arbre} (12 nœuds, 4 niveaux, largeur maximale 6) : l'arbre de test du projet,
+        dont les nœuds ont 0, 1, 2, 3 ou 4 enfants ;
+  \item \textbf{Grand arbre} (1\,000\,000 de nœuds) : arbre complet où chaque nœud a 3 enfants
+        (environ 13 niveaux), construit par \texttt{construireGrandArbre(1000000, 3)}.
+\end{itemize}
+
+\subsection{Les trois files}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{>{\ttfamily}l p{9cm}}
+\toprule
+\normalfont\textbf{File} & \textbf{Fonctionnement} \\
+\midrule
+queue<Noeud*, deque<Noeud*>> & Choix par défaut de la STL. Éléments rangés par \emph{blocs}
+                                contigus ; une allocation seulement quand un bloc est plein. \\
+queue<Noeud*, list<Noeud*>>  & Liste doublement chaînée : \emph{une allocation par} \texttt{push},
+                                une libération par \texttt{pop}, maillons dispersés en mémoire. \\
+File (personnalisée)                & \texttt{std::vector} caché + indice \texttt{debut} :
+                                \texttt{pop()} avance l'indice en $O(1)$ sans rien effacer. \\
+\bottomrule
+\end{tabular}
+\caption{Les trois implémentations de file comparées}
+\end{table}
+
+\begin{lstlisting}
+class File {
+private:
+    std::vector<Noeud*> elements;
+    size_t debut = 0;
+public:
+    void push(Noeud* n)  { elements.push_back(n); }
+    Noeud* front() const {
+        if (empty()) throw std::out_of_range("File::front() sur une file vide");
+        return elements[debut];
+    }
+    void pop() {
+        if (empty()) throw std::out_of_range("File::pop() sur une file vide");
+        debut++;
+    }
+    bool empty() const   { return debut == elements.size(); }
+};
+\end{lstlisting}
+
+% =====================================================================
+\section{Protocole de mesure}
+% =====================================================================
+
+\subsection{Environnement}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Élément} & \textbf{Valeur} \\
+\midrule
+Machine       & HP EliteBook 840 G5 \\
+Processeur    & Intel Core i7-8550U @ 1,80 GHz \\
+Système       & Windows 11 Pro \\
+Compilateur   & g++ 15.2.0 (MinGW-W64) \\
+Options       & \texttt{-std=c++17 -O2 -Wall -Wextra} \\
+Horloge       & \texttt{std::chrono::steady\_clock} \\
+\bottomrule
+\end{tabular}
+\caption{Environnement de test}
+\end{table}
+
+\subsection{Mesurer l'algorithme, pas l'affichage}
+
+Un appel à \texttt{std::cout} coûte beaucoup plus cher que l'extraction d'un nœud de la file.
+Chronométrer un parcours qui affiche reviendrait surtout à mesurer l'affichage. Le protocole
+sépare donc strictement le calcul et l'affichage :
+
+\begin{enumerate}
+  \item \textbf{Aucun affichage dans le parcours mesuré.} Chaque nœud est « traité » en
+        ajoutant sa valeur à une somme, que la fonction renvoie.
+  \item \textbf{Une somme de contrôle.} La somme est cumulée puis affichée à la fin. Elle empêche
+        le compilateur, en \texttt{-O2}, de supprimer une boucle dont le résultat ne
+        servirait à rien. Elle permet aussi de vérifier que chaque parcours a bien visité tous les nœuds.
+  \item \textbf{Répétitions et moyenne.} Un parcours du petit arbre dure moins d'une microseconde,
+        ce qui est trop court pour une mesure isolée. On le répète 100\,000 fois (20 fois pour le
+        grand arbre) et on divise le temps total par le nombre de répétitions.
+  \item \textbf{Code identique pour les trois files.} La file est un paramètre \texttt{template} :
+        exactement le même parcours est compilé pour chaque conteneur.
+  \item \textbf{Plusieurs essais.} Le programme complet est lancé 4 fois. On retient la médiane,
+        moins sensible que la moyenne aux perturbations du système.
+\end{enumerate}
+
+\begin{lstlisting}
+template <typename TypeFile>
+long long parcoursLargeur(Noeud* racine)
+{
+    TypeFile file;
+    long long somme = 0;
+    file.push(racine);
+    while (!file.empty()) {
+        Noeud* courant = file.front();
+        file.pop();
+        somme += courant->valeur;          // traitement, sans affichage
+        for (Noeud* e : courant->enfants)
+            file.push(e);
+    }
+    return somme;
+}
+
+template <typename TypeFile>
+double mesurer(Noeud* racine, int repetitions, long long& controle)
+{
+    auto debut = chrono::steady_clock::now();
+    for (int r = 0; r < repetitions; r++)
+        controle += parcoursLargeur<TypeFile>(racine);
+    auto fin = chrono::steady_clock::now();
+    return chrono::duration<double, nano>(fin - debut).count() / repetitions;
+}
+\end{lstlisting}
+
+\subsection{Vérification par la somme de contrôle}
+
+\begin{itemize}
+  \item Petit arbre : $7+9+67+1+28+8+10+29+2+57+40+6 = 264$ par parcours, donc
+        $264 \times 100\,000 \times 3 = 79\,200\,000$.
+  \item Grand arbre : valeurs $i \bmod 100$, soit $10\,000 \times 4\,950 = 49\,500\,000$ par
+        parcours, donc $49\,500\,000 \times 20 \times 3 = 2\,970\,000\,000$.
+\end{itemize}
+
+\noindent Les deux valeurs affichées par le programme sont exactement celles-ci à chaque essai :
+tous les parcours ont bien visité tous les nœuds.
+
+% =====================================================================
+\section{Résultats}
+% =====================================================================
+
+Les valeurs sont des temps moyens pour \textbf{un} parcours.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lccccc}
+\toprule
+\textbf{File} & \textbf{Essai 1} & \textbf{Essai 2} & \textbf{Essai 3} & \textbf{Essai 4} & \textbf{Médiane} \\
+\midrule
+\texttt{deque}       & 0,288 & 0,401 & 0,333 & 0,213 & \textbf{0,311} \\
+\texttt{list}        & 1,654 & 2,079 & 1,676 & 1,219 & \textbf{1,665} \\
+\texttt{File} personnalisée &0,668 & 0,603 & 0,678 & 0,537 & \textbf{0,636} \\
+\bottomrule
+\end{tabular}
+\caption{Petit arbre (12 nœuds, 100\,000 répétitions) — temps en microsecondes}
+\label{tab:petit}
+\end{table}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lccccc}
+\toprule
+\textbf{File} & \textbf{Essai 1} & \textbf{Essai 2} & \textbf{Essai 3} & \textbf{Essai 4} & \textbf{Médiane} \\
+\midrule
+\texttt{deque}       & 24,7  & 21,7  & 16,2  & 15,9  & \textbf{19,0}  \\
+\texttt{list}        & 244,0 & 148,2 & 156,9 & 137,1 & \textbf{152,6} \\
+\texttt{File} personnalisée &19,9  & 16,5  & 39,9  & 18,1  & \textbf{19,0}  \\
+\bottomrule
+\end{tabular}
+\caption{Grand arbre (1\,000\,000 de nœuds, 20 répétitions) — temps en millisecondes}
+\label{tab:grand}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.48\textwidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    ybar, bar width=22pt, width=\textwidth, height=6cm,
+    symbolic x coords={deque,list,perso},
+    xtick=data, ymin=0, ymax=2,
+    xticklabels={\texttt{deque}, \texttt{list}, personnalisée},
+    ylabel={µs / parcours},
+    title={Petit arbre (12 nœuds)},
+    nodes near coords,
+    every node near coord/.append style={font=\footnotesize, /pgf/number format/use comma},
+    yticklabel style={/pgf/number format/use comma},
+    enlarge x limits=0.25
+]
+\addplot[fill=blue!45] coordinates {(deque,0.311) (list,1.665) (perso,0.636)};
+\end{axis}
+\end{tikzpicture}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    ybar, bar width=22pt, width=\textwidth, height=6cm,
+    symbolic x coords={deque,list,perso},
+    xtick=data, ymin=0, ymax=180,
+    xticklabels={\texttt{deque}, \texttt{list}, personnalisée},
+    ylabel={ms / parcours},
+    title={Grand arbre (1\,000\,000 nœuds)},
+    nodes near coords,
+    every node near coord/.append style={font=\footnotesize, /pgf/number format/use comma},
+    yticklabel style={/pgf/number format/use comma},
+    enlarge x limits=0.25
+]
+\addplot[fill=orange!60] coordinates {(deque,19.0) (list,152.6) (perso,19.0)};
+\end{axis}
+\end{tikzpicture}
+\end{minipage}
+\caption{Temps médian d'un parcours selon la file (plus bas = meilleur)}
+\label{fig:barres}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{File} & \textbf{Petit arbre} & \textbf{Grand arbre} \\
+\midrule
+\texttt{deque}       & $1{,}0\times$ & $1{,}0\times$ \\
+\texttt{list}        & $5{,}4\times$ & $8{,}0\times$ \\
+\texttt{File} personnalisée &$2{,}0\times$ & $1{,}0\times$ \\
+\bottomrule
+\end{tabular}
+\caption{Temps relatif par rapport à \texttt{deque} (sur les médianes)}
+\label{tab:ratio}
+\end{table}
+
+% =====================================================================
+\section{Analyse}
+% =====================================================================
+
+\subsection{\texttt{std::list} : le coût des allocations}
+
+\texttt{std::list} est la plus lente dans tous les essais : environ $5\times$ plus lente
+que \texttt{deque} sur le petit arbre et $8\times$ sur le grand. Chaque \texttt{push} alloue un
+nouveau maillon sur le tas et chaque \texttt{pop} le libère : pour le grand arbre, cela représente
+un million d'allocations et un million de libérations \emph{par parcours}. De plus, les maillons
+sont dispersés en mémoire, ce qui exploite mal le cache du processeur. L'écart grandit avec la taille de
+l'arbre, car ces coûts s'accumulent alors que ceux de \texttt{deque} restent amortis.
+
+\subsection{\texttt{std::deque} : le bon choix par défaut}
+
+\texttt{deque} range ses éléments par blocs contigus et n'alloue qu'un bloc de temps en temps.
+Elle libère aussi les blocs vidés au fur et à mesure : sa mémoire reste proportionnelle à la
+\emph{largeur} de l'arbre, comme le veut l'algorithme. C'est la plus rapide sur le petit arbre
+et elle est à égalité sur le grand.
+
+\subsection{File personnalisée : rapide, mais gourmande en mémoire}
+
+Sur le grand arbre, la file personnalisée obtient la même médiane que \texttt{deque} (19,0~ms). Elle
+s'appuie sur un seul bloc contigu (\texttt{std::vector}), ce qui est idéal pour le cache. Sur le
+petit arbre, elle est environ deux fois plus lente que \texttt{deque}, car le \texttt{vector}
+grandit par réallocations successives (1, 2, 4, 8\dots{} éléments) à chaque parcours, et ce coût
+fixe pèse lourd quand il n'y a que 12 nœuds.
+
+Elle a surtout un défaut : \texttt{pop()} n'efface rien. Le \texttt{vector} garde tous les
+éléments passés par la file, soit une mémoire en $O(n)$ au lieu de $O(\text{largeur})$. Sur le
+grand arbre, cela représente un million de pointeurs (8~Mo) au lieu de la largeur du dernier niveau.
+
+\subsection{Fiabilité des mesures}
+
+Les temps varient d'un essai à l'autre (par exemple 15,9 à 24,7~ms pour \texttt{deque} sur le
+grand arbre), car Windows exécute d'autres tâches pendant la mesure. L'essai 3 de la file personnalisée
+(39,9~ms) en est un exemple : c'est une valeur isolée. C'est pourquoi on compare les \textbf{médianes} et
+non un essai unique. Le \emph{classement}, lui, est stable : \texttt{list} est la dernière dans
+les 4 essais et sur les deux tailles d'arbre.
+
+% =====================================================================
+\section{Conclusion}
+% =====================================================================
+
+\begin{itemize}
+  \item Le conteneur sous-jacent ne change pas le résultat du parcours, mais il change nettement
+        les performances.
+  \item \texttt{std::list} est à éviter pour une file : une allocation par élément la rend
+        $5$ à $8$ fois plus lente.
+  \item \texttt{std::deque}, choix par défaut de \texttt{std::queue}, offre le meilleur compromis
+        entre vitesse et mémoire.
+  \item Une file personnalisée sur \texttt{std::vector} est aussi rapide que \texttt{deque} sur un grand arbre,
+        mais elle consomme $O(n)$ en mémoire. Elle convient pour un parcours unique ou à des fins
+        pédagogiques.
+  \item Une mesure de temps n'a de sens que sans affichage, répétée, compilée avec optimisation
+        et vérifiée par une valeur de contrôle.
+\end{itemize}
+
+\paragraph{Perspectives.}
+Remplacer la file personnalisée par un buffer circulaire pour ramener sa mémoire à $O(\text{largeur})$.
+Mesurer aussi la mémoire maximale utilisée par chaque file. Comparer avec un parcours en
+profondeur utilisant \texttt{std::stack}.
+
+\end{document}

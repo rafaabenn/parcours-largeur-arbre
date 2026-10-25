@@ -1,16 +1,16 @@
-# Parcours en largeur d'un arbre n-aire — `std::queue` et file maison (C++17)
+# Parcours en largeur d'un arbre n-aire — `std::queue` et file personnalisée (C++17)
 
 **Module :** ILISI 2 — C++ / STL
 **Thème :** conteneurs adaptateurs (`std::queue`) et conteneurs séquentiels (`deque`, `list`, `vector`)
 
 ## Résumé
 
-Ce travail étudie le parcours en largeur (BFS) d'un arbre n-aire de 12 nœuds à travers trois programmes C++. L'arbre est une vraie structure chaînée : chaque `Noeud` garde ses enfants dans un `vector<Noeud*>`, ce qui lui permet d'en avoir un nombre quelconque. Le premier programme montre le parcours pas à pas avec `std::queue`. Le deuxième refait le même parcours avec une file écrite à la main sur un `vector`, pour comprendre le principe d'un adaptateur. Le troisième mesure le temps du parcours avec trois files différentes (`deque`, `list`, file maison), **sans aucun affichage pendant la mesure**.
+Ce travail étudie le parcours en largeur (BFS) d'un arbre n-aire de 12 nœuds à travers trois programmes C++. L'arbre est une structure chaînée : chaque `Noeud` garde ses enfants dans un `vector<Noeud*>`, ce qui lui permet d'en avoir un nombre quelconque. Le premier programme montre le parcours pas à pas avec `std::queue`. Le deuxième refait le même parcours avec une file écrite à la main sur un `vector`, pour comprendre le principe d'un adaptateur. Le troisième mesure le temps du parcours avec trois files différentes (`deque`, `list`, file personnalisée), **sans aucun affichage pendant la mesure**.
 
 Résultats principaux :
 - les deux programmes pas à pas donnent le même ordre : `7 9 67 1 28 8 10 29 2 57 40 6` ;
 - `std::list` est nettement la file la plus lente (≈ 4 à 6× sur 12 nœuds, ≈ 7 à 9× sur 1 000 000 de nœuds) ;
-- `std::deque`, le choix par défaut de `std::queue`, et la file maison sur `vector` ont des performances proches ;
+- `std::deque`, le choix par défaut de `std::queue`, et la file personnalisée sur `vector` ont des performances proches ;
 - tous les nœuds sont libérés à la fin, aucun programme ne fuit la mémoire.
 
 ## Sommaire
@@ -34,9 +34,8 @@ Résultats principaux :
 | 1 | Représenter un arbre n-aire par une structure chaînée (`struct Noeud` + `vector<Noeud*>`) |
 | 2 | Implémenter un parcours en largeur correct avec `std::queue` |
 | 3 | Visualiser l'état de la file à chaque étape pour comprendre le principe FIFO |
-| 4 | Distinguer un nœud **visité** (découvert, entré dans la file) d'un nœud **affiché** (sorti de la file) |
-| 5 | Comprendre ce qu'est un **adaptateur** en construisant soi-même une file sur un `vector` |
-| 6 | Mesurer correctement, sans affichage, l'impact du conteneur sous-jacent sur les performances |
+| 4 | Comprendre ce qu'est un **adaptateur** en construisant soi-même une file sur un `vector` |
+| 5 | Mesurer correctement, sans affichage, l'impact du conteneur sous-jacent sur les performances |
 
 ## 2. Rappels théoriques
 
@@ -73,7 +72,7 @@ Dans un arbre **n-aire**, un nœud peut avoir 0, 1, 2… ou n'importe quel nombr
 | `front()`  | `front()` |
 | `empty()`  | `empty()` |
 
-Le conteneur par défaut est `std::deque`. On peut le changer : `queue<Noeud*, list<Noeud*>>`. En revanche, `vector` ne convient pas, car il n'a pas de `pop_front()`. C'est pour cette raison que notre file maison utilise un indice `debut` qui avance, au lieu d'effacer le premier élément.
+Le conteneur par défaut est `std::deque`. On peut le changer : `queue<Noeud*, list<Noeud*>>`. En revanche, `vector` ne convient pas, car il n'a pas de `pop_front()`. C'est pour cette raison que notre file personnalisée utilise un indice `debut` qui avance, au lieu d'effacer le premier élément.
 
 ## 3. Organisation du projet
 
@@ -84,10 +83,10 @@ arbre/
 ├── .gitignore
 ├── src/
 │   ├── Arbre.h                # struct Noeud, construireArbre(), reinitialiser(), detruire() — commun aux 3
-│   ├── File.h                 # classe File maison (adaptateur sur vector) — programmes 2 et 3
+│   ├── File.h                 # classe File personnalisée (adaptateur sur vector) — programmes 2 et 3
 │   ├── LargeurQueue.cpp       # programme 1 : std::queue, affichage pas à pas + par niveau
-│   ├── LargeurFileMaison.cpp  # programme 2 : file maison sur vector, affichage pas à pas
-│   └── LargeurPerf.cpp        # programme 3 : mesure deque / list / file maison, sans affichage
+│   ├── LargeurFileVector.cpp  # programme 2 : file personnalisée sur vector, affichage pas à pas
+│   └── LargeurPerf.cpp        # programme 3 : mesure deque / list / file personnalisée, sans affichage
 └── build/                     # exécutables générés
 ```
 
@@ -187,8 +186,8 @@ detruire(racine);
 | Programme | File utilisée | Ce que le programme montre |
 |-----------|---------------|----------------------------|
 | `LargeurQueue.cpp` | `std::queue<Noeud*>` (sur `deque`) | à chaque étape : le nœud affiché, les nouveaux visités, les listes *visités* / *affichés* et le contenu de la file ; puis l'arbre **niveau par niveau** ; puis un 2ᵉ parcours du même arbre |
-| `LargeurFileMaison.cpp` | classe `File` maison (sur `vector`) | le même parcours sur une ligne par étape, avec la taille de la file ; puis un test de lecture sur une file vide |
-| `LargeurPerf.cpp` | `deque`, `list` et `File` maison | le temps moyen d'un parcours pour chacune, sans affichage |
+| `LargeurFileVector.cpp` | classe `File` personnalisée (sur `vector`) | le même parcours sur une ligne par étape, avec la taille de la file ; puis un test de lecture sur une file vide |
+| `LargeurPerf.cpp` | `deque`, `list` et `File` personnalisée | le temps moyen d'un parcours pour chacune, sans affichage |
 
 ### 5.3 Points clés du code
 
@@ -244,7 +243,7 @@ public:
 };
 ```
 
-**Protéger contre la file vide.** Sur une `std::queue` vide, `front()` et `pop()` ont un *comportement indéfini* : le programme peut planter ou lire n'importe quoi. Notre `File` vérifie et lance une exception `std::out_of_range`. `LargeurFileMaison.cpp` le teste à la fin :
+**Protéger contre la file vide.** Sur une `std::queue` vide, `front()` et `pop()` ont un *comportement indéfini* : le programme peut planter ou lire n'importe quoi. Notre `File` vérifie et lance une exception `std::out_of_range`. `LargeurFileVector.cpp` le teste à la fin :
 
 ```text
 Test file vide -> erreur attrapee : File::front() sur une file vide
@@ -368,7 +367,7 @@ Programme exécuté 3 fois. Les valeurs sont des temps moyens pour **un** parcou
 |------|---------|---------|---------|
 | `queue<Noeud*, deque<Noeud*>>` | 0,288 µs | 0,401 µs | 0,333 µs |
 | `queue<Noeud*, list<Noeud*>>`  | 1,654 µs | 2,079 µs | 1,676 µs |
-| `File` maison (`vector`) | 0,668 µs | 0,603 µs | 0,678 µs |
+| `File` personnalisée (`vector`) | 0,668 µs | 0,603 µs | 0,678 µs |
 
 **Arbre de 1 000 000 de nœuds, 3 enfants par nœud (20 répétitions)**
 
@@ -376,7 +375,7 @@ Programme exécuté 3 fois. Les valeurs sont des temps moyens pour **un** parcou
 |------|---------|---------|---------|
 | `queue<Noeud*, deque<Noeud*>>` | 24,7 ms | 21,7 ms | 16,2 ms |
 | `queue<Noeud*, list<Noeud*>>`  | 244,0 ms | 148,2 ms | 156,9 ms |
-| `File` maison (`vector`) | 19,9 ms | 16,5 ms | 39,9 ms |
+| `File` personnalisée (`vector`) | 19,9 ms | 16,5 ms | 39,9 ms |
 
 Les temps varient d'un essai à l'autre, car la machine fait d'autres tâches en même temps (la valeur de 39,9 ms en est un exemple). Il faut donc comparer les files **au sein d'un même essai**, et sur plusieurs essais.
 
@@ -385,7 +384,7 @@ Les temps varient d'un essai à l'autre, car la machine fait d'autres tâches en
 ### 7.1 Correction
 
 - L'ordre obtenu correspond exactement aux niveaux de l'arbre : le parcours est correct.
-- Le résultat ne dépend pas de la file utilisée (`std::queue` ou classe maison). Seul le principe FIFO compte.
+- Le résultat ne dépend pas de la file utilisée (`std::queue` ou classe personnalisée). Seul le principe FIFO compte.
 - Les cas particuliers sont gérés : feuilles (vector `enfants` vide), nœuds à 1, 2, 3 ou 4 enfants, arbre vide (`parcoursLargeur` retourne immédiatement si la racine est `nullptr`).
 - Tous les nœuds alloués avec `new` sont libérés par `detruire()` : aucun programme ne fuit.
 - Le même arbre peut être parcouru plusieurs fois grâce à `reinitialiser()`.
@@ -393,11 +392,11 @@ Les temps varient d'un essai à l'autre, car la machine fait d'autres tâches en
 
 ### 7.2 Pourquoi `list` est la plus lente
 
-Avec `std::list`, **chaque `push` fait une allocation mémoire** (un nouveau maillon) et chaque `pop` une libération. De plus, les maillons sont dispersés en mémoire, ce qui exploite mal le cache du processeur. `deque` alloue par **blocs** de plusieurs éléments contigus, et le `vector` de la file maison n'alloue que lorsqu'il doit grandir. Résultat : `list` est environ 5 fois plus lente sur 12 nœuds, et 7 à 10 fois plus lente sur un million.
+Avec `std::list`, **chaque `push` fait une allocation mémoire** (un nouveau maillon) et chaque `pop` une libération. De plus, les maillons sont dispersés en mémoire, ce qui exploite mal le cache du processeur. `deque` alloue par **blocs** de plusieurs éléments contigus, et le `vector` de la file personnalisée n'alloue que lorsqu'il doit grandir. Résultat : `list` est environ 5 fois plus lente sur 12 nœuds, et 7 à 10 fois plus lente sur un million.
 
-### 7.3 `deque` face à la file maison
+### 7.3 `deque` face à la file personnalisée
 
-Sur le petit arbre, `deque` est environ deux fois plus rapide. Sur le grand arbre, les deux sont au coude à coude, et la file maison est même un peu plus rapide dans deux essais sur trois. Les vérifications « file vide » ajoutées dans `front()` et `pop()` ne coûtent presque rien : le processeur prédit qu'elles sont toujours fausses. Notre file maison a toutefois un défaut : `pop()` n'efface rien. Le `vector` garde donc **tous** les éléments passés par la file jusqu'à la fin, soit O(n) en mémoire au lieu de O(largeur). `deque` libère ses blocs au fur et à mesure. La file maison convient donc pour comprendre le principe d'un adaptateur ou pour un parcours unique ; pour un usage général, `std::queue` (sur `deque`) reste le bon choix.
+Sur le petit arbre, `deque` est environ deux fois plus rapide. Sur le grand arbre, les deux sont au coude à coude, et la file personnalisée est même un peu plus rapide dans deux essais sur trois. Les vérifications « file vide » ajoutées dans `front()` et `pop()` ne coûtent presque rien : le processeur prédit qu'elles sont toujours fausses. Notre file personnalisée a toutefois un défaut : `pop()` n'efface rien. Le `vector` garde donc **tous** les éléments passés par la file jusqu'à la fin, soit O(n) en mémoire au lieu de O(largeur). `deque` libère ses blocs au fur et à mesure. La file personnalisée convient donc pour comprendre le principe d'un adaptateur ou pour un parcours unique ; pour un usage général, `std::queue` (sur `deque`) reste le bon choix.
 
 ### 7.4 Ce que montre l'affichage pas à pas
 
@@ -420,7 +419,7 @@ La trace de `LargeurQueue.cpp` montre que la liste *visités* est toujours **en 
 - Le **conteneur sous-jacent** compte pour les performances. `list` est nettement plus lente à cause d'une allocation par élément. `deque`, le choix par défaut, est le bon compromis entre vitesse et mémoire.
 - Une mesure de temps n'a de sens que **sans affichage**, **répétée** et compilée **avec optimisation**.
 
-**Pistes d'amélioration :** libérer la mémoire de la file maison, par exemple avec un buffer circulaire. Ajouter un parcours en profondeur avec `std::stack` pour comparer les ordres de visite et l'usage mémoire.
+**Pistes d'amélioration :** libérer la mémoire de la file personnalisée, par exemple avec un buffer circulaire. Ajouter un parcours en profondeur avec `std::stack` pour comparer les ordres de visite et l'usage mémoire.
 
 ## 9. Annexe — sorties du terminal
 
@@ -477,7 +476,7 @@ Parcours en largeur : 7 9 67 1 28 8 10 29 2 57 40 6
 </details>
 
 <details>
-<summary><code>.\build\LargeurFileMaison.exe</code></summary>
+<summary><code>.\build\LargeurFileVector.exe</code></summary>
 
 ```text
 Depart | file : [ 7 ]
@@ -507,11 +506,11 @@ Test file vide -> erreur attrapee : File::front() sur une file vide
 Arbre de 12 noeuds, 100000 repetitions
   queue<Noeud*, deque<Noeud*>> : 0.288 us / parcours
   queue<Noeud*, list<Noeud*>>  : 1.654 us / parcours
-  File maison (vector)         : 0.668 us / parcours
+  File personnalisee (vector)  : 0.668 us / parcours
 
 Arbre de 1000000 noeuds, 20 repetitions
   queue<Noeud*, deque<Noeud*>> : 24676.425 us / parcours
   queue<Noeud*, list<Noeud*>>  : 243983.580 us / parcours
-  File maison (vector)         : 19860.205 us / parcours
+  File personnalisee (vector)  : 19860.205 us / parcours
 ```
 </details>

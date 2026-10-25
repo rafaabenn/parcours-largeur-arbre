@@ -8,7 +8,7 @@
 #include <chrono>
 #include <iomanip>    // setprecision
 #include "Arbre.h"    // struct Noeud, construireArbre(), detruire()
-#include "File.h"     // notre classe File (la meme que dans LargeurFileMaison.cpp)
+#include "File.h"     // notre classe File (la meme que dans LargeurFileVector.cpp)
 using namespace std;
 
 // Construit un grand arbre n-aire de n noeuds ou chaque noeud a (au plus) "k" enfants
@@ -61,14 +61,14 @@ void comparer(Noeud* racine, int nbNoeuds, int repetitions)
     long long controle = 0;
     double tDeque  = mesurer<queue<Noeud*, deque<Noeud*>>>(racine, repetitions, controle);
     double tList   = mesurer<queue<Noeud*, list<Noeud*>>>(racine, repetitions, controle);
-    double tMaison = mesurer<File>(racine, repetitions, controle);
+    double tPerso  = mesurer<File>(racine, repetitions, controle);
 
     // l'affichage se fait seulement ICI, apres toutes les mesures
     cout << fixed << setprecision(3);
     cout << "Arbre de " << nbNoeuds << " noeuds, " << repetitions << " repetitions\n";
     cout << "  queue<Noeud*, deque<Noeud*>> : " << tDeque  / 1000 << " us / parcours\n";
     cout << "  queue<Noeud*, list<Noeud*>>  : " << tList   / 1000 << " us / parcours\n";
-    cout << "  File maison (vector)         : " << tMaison / 1000 << " us / parcours\n";
+    cout << "  File personnalisee (vector)  : " << tPerso / 1000 << " us / parcours\n";
     cout << "  (controle : " << controle << ")\n\n";
 }
 
